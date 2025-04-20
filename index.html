@@ -342,8 +342,10 @@
       const offsetX = getShapeOffsetX(draggedShape);
       const offsetY = getShapeOffsetY(draggedShape);
 
-      gx = Math.min(10 - getShapeWidth(draggedShape), Math.max(-offsetX, gx));
-      gy = Math.min(10 - getShapeHeight(draggedShape), Math.max(-offsetY, gy));
+      gx = Math.floor((clientX - rect.left) / (rect.width / 10)) - offsetX;
+      gy = Math.floor((clientY - rect.top) / (rect.height / 10)) - offsetY;
+      gx = Math.max(0, Math.min(10 - getShapeWidth(draggedShape), gx));
+      gy = Math.max(0, Math.min(10 - getShapeHeight(draggedShape), gy));
       
       const canPlaceHere = canPlace(draggedShape, gx, gy);
       
@@ -386,8 +388,10 @@
       const offsetX = getShapeOffsetX(draggedShape);
       const offsetY = getShapeOffsetY(draggedShape);
 
-      gx = Math.min(10 - getShapeWidth(draggedShape), Math.max(-offsetX, gx));
-      gy = Math.min(10 - getShapeHeight(draggedShape), Math.max(-offsetY, gy));
+      gx = Math.floor((clientX - rect.left) / (rect.width / 10)) - offsetX;
+      gy = Math.floor((clientY - rect.top) / (rect.height / 10)) - offsetY;
+      gx = Math.max(0, Math.min(10 - getShapeWidth(draggedShape), gx));
+      gy = Math.max(0, Math.min(10 - getShapeHeight(draggedShape), gy));
 
       clearPreviews();
 
