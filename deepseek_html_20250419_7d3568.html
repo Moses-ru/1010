@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1010!</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-x: hidden;
+      touch-action: none;
+    }
+
+    h1 {
+      margin: 1rem;
+    }
+
+    #score {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: #facc15;
+      text-shadow: 0 0 5px #eab30866;
+      transition: transform 0.3s ease;
+    }
+
+    #score.animate {
+      transform: scale(1.2);
+    }
+
+    #game {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 2px;
+      width: 80vmin;
+      height: 80vmin;
+      max-width: 400px;
+      max-height: 400px;
+      background: #1e293b;
+      border-radius: 1rem;
+      padding: 0.3rem;
+    }
+
+    .cell {
+      background: #334155;
+      border-radius: 0.25rem;
+      aspect-ratio: 1/1;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+
+    .cell.filled {
+      background: linear-gradient(to bottom right, #3b82f6, #60a5fa);
+      box-shadow: inset 0 0 4px #fff3;
+      animation: pop 0.2s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .cell.preview {
+      background: #38bdf866 !important;
+      border: 1px dashed #38bdf8;
+    }
+
+    .cell.invalid {
+      background: #f8717166 !important;
+      border: 1px dashed #f87171;
+    }
+
+    #pieces {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      max-width: 100%;
+      padding: 10px;
+    }
+
+    .piece {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      width: 80px;
+      height: 80px;
+      background: #1e293b;
+      border-radius: 0.75rem;
+      padding: 4px;
+      position: relative;
+    }
+
+    .piece-cell {
+      background: transparent;
+      border-radius: 0.25rem;
+      margin: 1px;
+      transition: background 0.2s;
+    }
+
+    .piece-cell.filled {
+      background: linear-gradient(to bottom right, #facc15, #eab308);
+      box-shadow: inset 0 0 4px #fff3;
+      cursor: grab;
+    }
+
+    .piece-cell.filled:active {
+      cursor: grabbing;
+    }
+
+    #gameOver {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 1.5rem;
+      color: #f87171;
+      animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    #gameOver button {
+      margin-top: 1rem;
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .ghost {
+      position: absolute;
+      opacity: 0.8;
+      pointer-events: none;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      width: 40px;
+      height: 40px;
+      gap: 2px;
+    }
+
+    .ghost-cell {
+      background: #facc15aa;
+      border-radius: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>1010!</h1>
+  <div id="score">Очки: 0</div>
+  <div id="game"></div>
+  <div id="pieces"></div>
+  <div id="gameOver" style="display: none;">
+    <div style="font-size: 2rem; text-shadow: 0 0 10px #f87171aa">Игра окончена!</div>
+    <button onclick="restartGame()">Сыграть снова</button>
+  </div>
+
+  <script>
+    let score = 0;
+    const game = document.getElementById("game");
+    const piecesContainer = document.getElementById("pieces");
+    const scoreDisplay = document.getElementById("score");
+    const gameOverScreen = document.getElementById("gameOver");
+    const grid = [];
+    let draggedPiece = null;
+    let draggedShape = null;
+    let ghostElement = null;
+    let isDragging = false;
+    let startX, startY;
+
+    // Тетрис-подобные фигуры (4x4)
+    const tetrisShapes = [
+      [[1,1,1,1]], // I
+      [[1,1,1], [0,0,1]], // L
+      [[1,1,1], [1,0,0]], // обратная L
+      [[1,1], [1,1]], // квадрат
+      [[0,1,1], [1,1,0]], // Z
+      [[1,1,0], [0,1,1]], // S
+      [[1,1,1], [0,1,0]]  // T
+    ];
+
+    // Создаем игровое поле
+    for (let i = 0; i < 100; i++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      game.appendChild(cell);
+      grid.push(cell);
+    }
+
+    function updateScore(points) {
+      score += points;
+      scoreDisplay.textContent = `Очки: ${score}`;
+      scoreDisplay.classList.add("animate");
+      setTimeout(() => scoreDisplay.classList.remove("animate"), 300);
+    }
+
+    function rotateMatrix(matrix) {
+      const N = matrix.length;
+      const result = Array(N).fill().map(() => Array(N).fill(0));
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          result[x][N-1-y] = matrix[y][x];
+        }
+      }
+      return result;
+    }
+
+    function createShapeMatrix(shape) {
+      // Создаем матрицу 4x4 для фигуры
+      const matrix = Array(4).fill().map(() => Array(4).fill(0));
+      const offsetX = Math.floor((4 - shape[0].length) / 2);
+      const offsetY = Math.floor((4 - shape.length) / 2);
+      
+      for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+          if (shape[y][x]) matrix[y + offsetY][x + offsetX] = 1;
+        }
+      }
+      return matrix;
+    }
+
+    function createPiece(shapeMatrix) {
+      const piece = document.createElement("div");
+      piece.classList.add("piece");
+      
+      // Создаем клетки фигуры
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const cell = document.createElement("div");
+          cell.classList.add("piece-cell");
+          if (shapeMatrix[y][x]) {
+            cell.classList.add("filled");
+            cell.addEventListener("mousedown", startDrag);
+            cell.addEventListener("touchstart", startDrag, { passive: false });
+          }
+          piece.appendChild(cell);
+        }
+      }
+      
+      return piece;
+    }
+
+    function startDrag(e) {
+      e.preventDefault();
+      const piece = e.target.closest(".piece");
+      if (!piece) return;
+      
+      isDragging = true;
+      draggedPiece = piece;
+      draggedShape = getShapeFromPiece(piece);
+      
+      // Запоминаем начальные координаты
+      if (e.type === 'mousedown') {
+        startX = e.clientX;
+        startY = e.clientY;
+      } else if (e.type === 'touchstart') {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      }
+      
+      // Создаем призрачный элемент для перетаскивания
+      ghostElement = createGhostPiece(draggedShape);
+      document.body.appendChild(ghostElement);
+      updateGhostPosition(e);
+      
+      document.addEventListener("mousemove", dragPiece);
+      document.addEventListener("mouseup", endDrag);
+      document.addEventListener("touchmove", dragPiece, { passive: false });
+      document.addEventListener("touchend", endDrag);
+    }
+
+    function getShapeFromPiece(piece) {
+      const shape = Array(4).fill().map(() => Array(4).fill(0));
+      const cells = piece.querySelectorAll(".piece-cell");
+      cells.forEach((cell, index) => {
+        const y = Math.floor(index / 4);
+        const x = index % 4;
+        shape[y][x] = cell.classList.contains("filled") ? 1 : 0;
+      });
+      return shape;
+    }
+
+    function createGhostPiece(shape) {
+      const ghost = document.createElement("div");
+      ghost.classList.add("ghost");
+      
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const cell = document.createElement("div");
+          cell.classList.add("ghost-cell");
+          cell.style.opacity = shape[y][x] ? "0.8" : "0";
+          ghost.appendChild(cell);
+        }
+      }
+      
+      return ghost;
+    }
+
+    function updateGhostPosition(e) {
+      if (!ghostElement || !isDragging) return;
+      
+      let clientX, clientY;
+      if (e.type === 'mousemove') {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      } else if (e.type === 'touchmove') {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        return;
+      }
+      
+      // Позиционируем призрак по центру курсора
+      ghostElement.style.left = `${clientX - ghostElement.offsetWidth / 2}px`;
+      ghostElement.style.top = `${clientY - ghostElement.offsetHeight / 2}px`;
+      
+      // Показываем предпросмотр на игровом поле
+      clearPreviews();
+      const rect = game.getBoundingClientRect();
+      let gx = Math.floor((clientX - rect.left) / (rect.width / 10));
+      let gy = Math.floor((clientY - rect.top) / (rect.height / 10));
+
+      // Магнитим, учитывая отступы фигуры
+      const offsetX = getShapeOffsetX(draggedShape);
+      const offsetY = getShapeOffsetY(draggedShape);
+
+      gx = Math.min(10 - getShapeWidth(draggedShape), Math.max(-offsetX, gx));
+      gy = Math.min(10 - getShapeHeight(draggedShape), Math.max(-offsetY, gy));
+      
+      const canPlaceHere = canPlace(draggedShape, gx, gy);
+      
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (draggedShape[y][x]) {
+            const cx = gx + x;
+            const cy = gy + y;
+            if (cx >= 0 && cx < 10 && cy >= 0 && cy < 10) {
+              grid[cy * 10 + cx].classList.add(canPlaceHere ? "preview" : "invalid");
+            }
+          }
+        }
+      }
+    }
+
+    function dragPiece(e) {
+      e.preventDefault();
+      if (!isDragging) return;
+      updateGhostPosition(e);
+    }
+
+    function endDrag(e) {
+      if (!isDragging) return;
+
+      let clientX, clientY;
+      if (e.type === 'mouseup') {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      } else if (e.type === 'touchend') {
+        if (e.changedTouches.length === 0) return;
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+      }
+
+      const rect = game.getBoundingClientRect();
+      let gx = Math.floor((clientX - rect.left) / (rect.width / 10));
+      let gy = Math.floor((clientY - rect.top) / (rect.height / 10));
+
+      const offsetX = getShapeOffsetX(draggedShape);
+      const offsetY = getShapeOffsetY(draggedShape);
+
+      gx = Math.min(10 - getShapeWidth(draggedShape), Math.max(-offsetX, gx));
+      gy = Math.min(10 - getShapeHeight(draggedShape), Math.max(-offsetY, gy));
+
+      clearPreviews();
+
+      if (canPlace(draggedShape, gx, gy)) {
+        placeShape(draggedShape, gx, gy);
+
+        const index = Array.from(piecesContainer.children).indexOf(draggedPiece);
+        if (index !== -1) {
+          currentShapes.splice(index, 1);
+          const newShape = randomShapeMatrix();
+          currentShapes.splice(index, 0, newShape);
+          const newPiece = createPiece(newShape);
+          piecesContainer.replaceChild(newPiece, draggedPiece);
+          checkGameOver(currentShapes);
+        }
+      }
+
+      cleanupDrag();
+    }
+
+    function getShapeOffsetX(shape) {
+      for (let x = 0; x < 4; x++) {
+        if (shape.some(row => row[x])) return x;
+      }
+      return 0;
+    }
+
+    function randomShapeMatrix() {
+      const shape = tetrisShapes[Math.floor(Math.random() * tetrisShapes.length)];
+      let matrix = createShapeMatrix(shape);
+      const rotations = Math.floor(Math.random() * 4);
+      for (let r = 0; r < rotations; r++) matrix = rotateMatrix(matrix);
+      return matrix;
+    }
+
+    function getShapeOffsetY(shape) {
+      for (let y = 0; y < 4; y++) {
+        if (shape[y].some(cell => cell)) return y;
+      }
+      return 0;
+    }
+
+    function getShapeOffsetY(shape) {
+      for (let y = 0; y < 4; y++) {
+        if (shape[y].some(cell => cell)) return y;
+      }
+      return 0;
+    }
+
+    function cleanupDrag() {
+      if (ghostElement) {
+        ghostElement.remove();
+        ghostElement = null;
+      }
+      
+      clearPreviews();
+      isDragging = false;
+      draggedPiece = null;
+      draggedShape = null;
+      
+      document.removeEventListener("mousemove", dragPiece);
+      document.removeEventListener("mouseup", endDrag);
+      document.removeEventListener("touchmove", dragPiece);
+      document.removeEventListener("touchend", endDrag);
+    }
+
+    function clearPreviews() {
+      grid.forEach(cell => {
+        cell.classList.remove("preview");
+        cell.classList.remove("invalid");
+      });
+    }
+
+    function getShapeWidth(shape) {
+  return Math.max(...shape.map(row => row.lastIndexOf(1) + 1));
+}
+
+    function getShapeHeight(shape) {
+      for (let y = shape.length - 1; y >= 0; y--) {
+        if (shape[y].some(v => v === 1)) return y + 1;
+      }
+      return 0;
+    }
+
+    let currentShapes = [];
+
+    function generatePieces() {
+      piecesContainer.innerHTML = "";
+      currentShapes = [];
+
+      for (let i = 0; i < 3; i++) {
+        addNewPiece();
+      }
+
+      checkGameOver(currentShapes);
+    }
+
+    function addNewPiece() {
+      const randomShape = tetrisShapes[Math.floor(Math.random() * tetrisShapes.length)];
+      let shapeMatrix = createShapeMatrix(randomShape);
+      const rotations = Math.floor(Math.random() * 4);
+      for (let r = 0; r < rotations; r++) shapeMatrix = rotateMatrix(shapeMatrix);
+
+      currentShapes.push(shapeMatrix);
+      piecesContainer.appendChild(createPiece(shapeMatrix));
+    }
+
+    function canPlace(shape, gx, gy) {
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (shape[y][x]) {
+            const cellX = gx + x;
+            const cellY = gy + y;
+            if (cellX < 0 || cellX >= 10 || cellY < 0 || cellY >= 10) return false;
+            const cell = grid[cellY * 10 + cellX];
+            if (cell.classList.contains("filled")) return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function canAnyPieceBePlaced(pieces) {
+      for (const piece of pieces) {
+        for (let y = 0; y <= 10 - 4; y++) {
+          for (let x = 0; x <= 10 - 4; x++) {
+            if (canPlace(piece, x, y)) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function checkGameOver(pieces) {
+      if (!canAnyPieceBePlaced(pieces)) {
+        gameOverScreen.style.display = "flex";
+        piecesContainer.innerHTML = "";
+      }
+    }
+
+    function placeShape(shape, gx, gy) {
+      let placed = 0;
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (shape[y][x]) {
+            const cell = grid[(gy + y) * 10 + (gx + x)];
+            cell.classList.add("filled");
+            placed++;
+          }
+        }
+      }
+      updateScore(placed);
+      checkLines();
+    }
+
+    function checkLines() {
+      for (let i = 0; i < 10; i++) {
+        let rowFull = true, colFull = true;
+        for (let j = 0; j < 10; j++) {
+          if (!grid[i * 10 + j].classList.contains("filled")) rowFull = false;
+          if (!grid[j * 10 + i].classList.contains("filled")) colFull = false;
+        }
+        if (rowFull) {
+          for (let j = 0; j < 10; j++) grid[i * 10 + j].classList.remove("filled");
+          updateScore(10);
+        }
+        if (colFull) {
+          for (let j = 0; j < 10; j++) grid[j * 10 + i].classList.remove("filled");
+          updateScore(10);
+        }
+      }
+    }
+
+    function restartGame() {
+      score = 0;
+      scoreDisplay.textContent = "Очки: 0";
+      gameOverScreen.style.display = "none";
+      grid.forEach(cell => cell.classList.remove("filled"));
+      generatePieces();
+    }
+
+    // Инициализация игры
+    
+    generatePieces();
+
+    // Обработчик для отмены стандартного поведения касаний
+    document.addEventListener('touchmove', function(e) {
+      if (isDragging) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+  </script>
+</body>
+</html>
