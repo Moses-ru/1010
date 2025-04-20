@@ -329,7 +329,8 @@
       
       // Позиционируем призрак по центру курсора
       ghostElement.style.left = `${clientX - ghostElement.offsetWidth / 2}px`;
-      ghostElement.style.top = `${clientY - ghostElement.offsetHeight / 2}px`;
+      ghostElement.style.top = `${clientY - ghostElement.offsetHeight / 2 - 40}px`; // сместили выше пальца
+
       
       // Показываем предпросмотр на игровом поле
       clearPreviews();
